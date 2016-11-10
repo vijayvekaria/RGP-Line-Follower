@@ -94,7 +94,7 @@ public class Driver {
 				double integral = 0;
 				double derivative = 0;
 				double lastError = 0;
-				while(!curtainInFront){	//Needs to change to soundActivated when sound module is added
+				while(!curtainInFront){	
 					currentReading = calculateColorReadingAverage();
 					currentError = currentReading - bwMidPoint;
 					integral = currentError + integral;
