@@ -1,61 +1,60 @@
 package driver;
 
 import lejos.hardware.ev3.LocalEV3;
-import lejos.hardware.motor.Motor;
+import lejos.hardware.lcd.TextLCD;
+import lejos.hardware.motor.EV3LargeRegulatedMotor;
+import lejos.hardware.port.MotorPort;
 import lejos.hardware.port.Port;
 import lejos.hardware.sensor.EV3ColorSensor;
 import lejos.hardware.sensor.EV3UltrasonicSensor;
+import lejos.robotics.RegulatedMotor;
 import lejos.robotics.SampleProvider;
 import lejos.robotics.navigation.DifferentialPilot;
 
 
 public class Driver {
+	TextLCD TEST = LocalEV3.get().getTextLCD();
+	RegulatedMotor mB = new EV3LargeRegulatedMotor(MotorPort.B);
+	RegulatedMotor mC = new EV3LargeRegulatedMotor(MotorPort.C);
+	DifferentialPilot ev3Pilot = new DifferentialPilot(5.5, 12, mB, mC);
 	
-	//Create sensor ports
 	Port colourSensorPort = LocalEV3.get().getPort("S3");
-	Port ultrasonicSensorPort = LocalEV3.get().getPort("S2");
-	
-	//Create color sensor and sample objects
 	EV3ColorSensor colourSensor;
 	SampleProvider colourSensorProvider;
 	float[] bwSample;
+	float correction = 0;
 	
-	//Create ultrasonic sensor and sample objects
-	EV3UltrasonicSensor ultrasonicSensor;
-	SampleProvider ultrasonicSensorProvider;
-	float[] distanceSample; 
 	
-	//Create brick pilot
-	DifferentialPilot ev3Pilot;
+//	Port ultrasonicSensorPort = LocalEV3.get().getPort("S2");
+//	EV3UltrasonicSensor ultrasonicSensor;
+//	SampleProvider ultrasonicSensorProvider;
+//	float[] distanceSample; 
+
+//	boolean curtainInFront = true;
 	
-	boolean curtainInFront = true;
+	public static void main(String[] args) {
+		Driver testDriver = new Driver();
+	}
 	
-	//Initialise SENSORS
+	public Driver() {
+		TEST.drawString("START" , 0, 0);
+		createSensor();
+		//runCurtainCheck();
+		runTrack();
+	}
+	
 	private void createSensor() {
-		//Colour sensor initialisation
 		colourSensor = new EV3ColorSensor(colourSensorPort);
-		colourSensorProvider = colourSensor.getRGBMode();
+		colourSensorProvider = colourSensor.getRedMode();
 		bwSample = new float[colourSensorProvider.sampleSize()];
 		
-		//Ultrasonic sensor initialisation
-		ultrasonicSensor = new EV3UltrasonicSensor(ultrasonicSensorPort);
+		/*ultrasonicSensor = new EV3UltrasonicSensor(ultrasonicSensorPort);
 		ultrasonicSensorProvider = ultrasonicSensor.getDistanceMode();
-		distanceSample = new float[colourSensorProvider.sampleSize()];
+		distanceSample = new float[colourSensorProvider.sampleSize()]; */
 	}
 	
-	//Initialise EV3 Pilot
-	private void createPilot() {
-		ev3Pilot = new DifferentialPilot(5.5, 12, Motor.B, Motor.C);
-	}
-	
-	//Calculates average RGB value from colour sensor sample
-	private double calculateColorReadingAverage(){
-		colourSensorProvider.fetchSample(bwSample, 0);
-		double avgSample = (bwSample[0] + bwSample[1] + bwSample[1]) / 3;
-		return avgSample;
-	}
-	
-	//Creates and runs a new thread to check if a curtain is in front of the brick
+
+/*Creates and runs a new thread to check if a curtain is in front of the brick
 	private void runCurtainCheck() {
 		new Thread(new Runnable() {
 			@Override
@@ -70,52 +69,45 @@ public class Driver {
 				}
 			}
 		}).start();
-	}
+	}*/
 	
 	//Runs the track 
 	private void runTrack() {
-		double bValue = 10;
-		double wValue = 90;
-		double bwMidPoint = (bValue + wValue) / 2;
+		double bValue = 0.1;
+		double wValue = 0.9;
+		final double bwMidPoint = (bValue + wValue) / 2;
+		final double propConstant = 100;
+		final double diffConstant = 6000;
 		
-		double propConstant = 10;
-		double intgConstant = 1;
-		double diffConstant = 100;
-		
-
 		new Thread(new Runnable() {		
-			@Override
-			/*		Tuning Constants
-			 * 				: http://www.inpharmix.com/jps/PID_Controller_For_Lego_Mindstorms_Robots.html
-			 */
 			public void run() {
 				double currentReading = 0;
 				double currentError = 0;
-				double integral = 0;
 				double derivative = 0;
 				double lastError = 0;
-				while(!curtainInFront){	
-					currentReading = calculateColorReadingAverage();
-					currentError = currentReading - bwMidPoint;
-					integral = currentError + integral;
-					derivative = currentError - lastError;
-					double correction = (propConstant * currentError) + (intgConstant * integral) + (diffConstant * derivative);
-					ev3Pilot.steer(correction);
+	
+				mB.forward();
+				mC.forward();
+				
+				while(true){
+					colourSensorProvider.fetchSample(bwSample, 0);
+					currentReading = bwSample[0];
+
+					currentError = currentReading - bwMidPoint; //Calculates the difference between the reading and the expected midPoint
+					derivative = currentError - lastError; //Calculates the gain in error
+
+					correction = (float) ((float) 1.5 * ((propConstant * currentError) + (diffConstant * derivative))); //Calculates the correction value
+					
+					TEST.drawString("Reading: " + currentReading, 0, 1);
+					TEST.drawString("Error: " + currentError, 0, 2);
+					TEST.drawString("Correction: " + correction, 0, 3);
+		
+					mB.setSpeed((int) (75 - correction));
+					mC.setSpeed((int) (75 + correction));
+					
 					lastError = currentError;
 				}
 			}			
 		}).start();
-	}
-	
-	//Constructor that call initialisation methods and run methods
-	public Driver() {
-		createSensor();
-		createPilot();
-		runCurtainCheck();
-		runTrack();
-	}
-	
-	public static void main(String[] args) {
-		Driver testDriver = new Driver();
 	}
 }
