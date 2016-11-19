@@ -3,109 +3,147 @@ package driver;
 import lejos.hardware.ev3.LocalEV3;
 import lejos.hardware.lcd.TextLCD;
 import lejos.hardware.motor.EV3LargeRegulatedMotor;
+import lejos.hardware.motor.EV3MediumRegulatedMotor;
 import lejos.hardware.port.MotorPort;
 import lejos.hardware.port.Port;
 import lejos.hardware.sensor.EV3ColorSensor;
 import lejos.hardware.sensor.EV3UltrasonicSensor;
 import lejos.robotics.RegulatedMotor;
 import lejos.robotics.SampleProvider;
-import lejos.robotics.navigation.DifferentialPilot;
-
 
 public class Driver {
-	TextLCD TEST = LocalEV3.get().getTextLCD();
-	RegulatedMotor mB = new EV3LargeRegulatedMotor(MotorPort.B);
-	RegulatedMotor mC = new EV3LargeRegulatedMotor(MotorPort.C);
-	DifferentialPilot ev3Pilot = new DifferentialPilot(5.5, 12, mB, mC);
+	TextLCD ev3Screen = LocalEV3.get().getTextLCD();
+	RegulatedMotor headMotor = new EV3MediumRegulatedMotor(MotorPort.A);
+	RegulatedMotor leftMotor = new EV3LargeRegulatedMotor(MotorPort.B);
+	RegulatedMotor rightMotor = new EV3LargeRegulatedMotor(MotorPort.C);
 	
+	Port ultrasonicSensorPort = LocalEV3.get().getPort("S2");
 	Port colourSensorPort = LocalEV3.get().getPort("S3");
+	
 	EV3ColorSensor colourSensor;
 	SampleProvider colourSensorProvider;
-	float[] bwSample;
-	float correction = 0;
+	float[] colourSample;
 	
-	
-//	Port ultrasonicSensorPort = LocalEV3.get().getPort("S2");
-//	EV3UltrasonicSensor ultrasonicSensor;
-//	SampleProvider ultrasonicSensorProvider;
-//	float[] distanceSample; 
+	EV3UltrasonicSensor ultrasonicSensor;
+	SampleProvider ultrasonicSensorProvider;
+	float[] distanceSample; 
 
-//	boolean curtainInFront = true;
+	boolean obstacleInFront = false;
+	
+	double bwMidPoint = 0.5;
+	double motorPower = 50;
+	double propConstant = 100;
+	double diffConstant = 6000;
+	
+	
 	
 	public static void main(String[] args) {
 		Driver testDriver = new Driver();
 	}
-	
+
 	public Driver() {
-		TEST.drawString("START" , 0, 0);
+		ev3Screen.drawString("START" , 0, 0);
 		createSensor();
-		//runCurtainCheck();
+		runObstacleCheck();
 		runTrack();
 	}
 	
 	private void createSensor() {
 		colourSensor = new EV3ColorSensor(colourSensorPort);
 		colourSensorProvider = colourSensor.getRedMode();
-		bwSample = new float[colourSensorProvider.sampleSize()];
+		colourSample = new float[colourSensorProvider.sampleSize()];
 		
-		/*ultrasonicSensor = new EV3UltrasonicSensor(ultrasonicSensorPort);
+		ultrasonicSensor = new EV3UltrasonicSensor(ultrasonicSensorPort);
 		ultrasonicSensorProvider = ultrasonicSensor.getDistanceMode();
-		distanceSample = new float[colourSensorProvider.sampleSize()]; */
+		distanceSample = new float[colourSensorProvider.sampleSize()];
 	}
 	
-
-/*Creates and runs a new thread to check if a curtain is in front of the brick
-	private void runCurtainCheck() {
+	private float getColourReading(){
+		colourSensorProvider.fetchSample(colourSample, 0);
+		return colourSample[0];
+	}
+	
+	private float getDistanceReading(){
+		ultrasonicSensorProvider.fetchSample(distanceSample, 0);
+		return distanceSample[0];
+	}
+	
+	private void runObstacleCheck() {
 		new Thread(new Runnable() {
-			@Override
 			public void run() {
 				while(true){
-					ultrasonicSensorProvider.fetchSample(distanceSample, 0);
-					if (distanceSample[0] > 0.1){
-						curtainInFront = false;
-					} else {
-						curtainInFront = true;
+					float distanceReading = getDistanceReading();
+					if (distanceReading < 0.15){
+						obstacleInFront = true;
+						manouverObstacle(distanceReading);
 					}
 				}
 			}
 		}).start();
-	}*/
+	}
 	
-	//Runs the track 
-	private void runTrack() {
-		double bValue = 0.1;
-		double wValue = 0.9;
-		final double bwMidPoint = (bValue + wValue) / 2;
-		final double propConstant = 100;
-		final double diffConstant = 6000;
+	private void manouverObstacle(float distanceFromObstacle) {
+		leftMotor.stop();
+		rightMotor.stop();
 		
+		headMotor.rotate(90);
+		rightMotor.rotate(180);				
+		
+		double currentReading = 0;
+		double currentError = 0;
+		double obstacleCorrection = 0;
+		double derivative = 0;
+		double lastError = 0;
+		
+		while(true){
+			float colourReading = getColourReading();
+			if (colourReading > 0.5){
+				currentReading = getDistanceReading();
+				currentError = currentReading - distanceFromObstacle;
+				derivative = currentError - lastError;
+				obstacleCorrection = (propConstant * currentError) + (diffConstant * derivative);
+				
+				leftMotor.setSpeed((int) (motorPower - obstacleCorrection));
+				rightMotor.setSpeed((int) (motorPower + obstacleCorrection));
+				
+				lastError = currentError;
+			} else {
+				obstacleInFront = false;
+				headMotor.rotate(-94);
+				break;
+			}
+		}
+	}
+	
+
+	private void runTrack() {
 		new Thread(new Runnable() {		
 			public void run() {
 				double currentReading = 0;
 				double currentError = 0;
+				double trackCorrection = 0;
 				double derivative = 0;
 				double lastError = 0;
-	
-				mB.forward();
-				mC.forward();
 				
+				leftMotor.forward();
+				rightMotor.forward();
+
 				while(true){
-					colourSensorProvider.fetchSample(bwSample, 0);
-					currentReading = bwSample[0];
-
-					currentError = currentReading - bwMidPoint; //Calculates the difference between the reading and the expected midPoint
-					derivative = currentError - lastError; //Calculates the gain in error
-
-					correction = (float) ((float) 1.5 * ((propConstant * currentError) + (diffConstant * derivative))); //Calculates the correction value
-					
-					TEST.drawString("Reading: " + currentReading, 0, 1);
-					TEST.drawString("Error: " + currentError, 0, 2);
-					TEST.drawString("Correction: " + correction, 0, 3);
-		
-					mB.setSpeed((int) (75 - correction));
-					mC.setSpeed((int) (75 + correction));
-					
-					lastError = currentError;
+					if(!obstacleInFront){
+						currentReading = getColourReading();
+						currentError = currentReading - bwMidPoint;
+						derivative = currentError - lastError;
+						trackCorrection = (propConstant * currentError) + (diffConstant * derivative);
+						
+						ev3Screen.drawString("Reading: " + currentReading, 0, 2);
+						ev3Screen.drawString("Error: " + currentError, 0, 1);
+						ev3Screen.drawString("Correction: " + trackCorrection, 0, 3);
+						
+						leftMotor.setSpeed((int) (motorPower - trackCorrection));
+						rightMotor.setSpeed((int) (motorPower + trackCorrection));
+						
+						lastError = currentError;
+					}
 				}
 			}			
 		}).start();
