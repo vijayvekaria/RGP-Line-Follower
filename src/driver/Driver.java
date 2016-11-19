@@ -37,6 +37,8 @@ public class Driver {
 	
 	
 	
+	
+	
 	public static void main(String[] args) {
 		Driver testDriver = new Driver();
 	}
@@ -95,6 +97,9 @@ public class Driver {
 		double derivative = 0;
 		double lastError = 0;
 		
+		leftMotor.forward();
+		rightMotor.forward();
+		
 		while(true){
 			float colourReading = getColourReading();
 			if (colourReading > 0.5){
@@ -114,7 +119,6 @@ public class Driver {
 			}
 		}
 	}
-	
 
 	private void runTrack() {
 		new Thread(new Runnable() {		
