@@ -62,11 +62,14 @@ public class Driver {
 			public void run() {
 				while(true){
 					if (!obstacleInFront) {
+						ev3Screen.drawString("Running ObsCheck" , 0, 1);
 						float distanceReading = getDistanceReading();
 						if (distanceReading < 0.15){
 							obstacleInFront = true;
 							manouverObstacle(distanceReading);
 						}
+					} else {
+						ev3Screen.drawString("Stopped ObsCheck" , 0, 1);
 					}
 				}
 			}
@@ -87,19 +90,22 @@ public class Driver {
 
 				while(true){
 					if(!obstacleInFront){
+						ev3Screen.drawString("Running Track" , 0, 2);
 						currentReading = getColourReading();
 						currentError = currentReading - bwMidPoint;
 						derivative = currentError - lastError;
 						trackCorrection = (propConstant * currentError) + (diffConstant * derivative);
 						
-						ev3Screen.drawString("Reading: " + currentReading, 0, 2);
-						ev3Screen.drawString("Error: " + currentError, 0, 1);
-						ev3Screen.drawString("Correction: " + trackCorrection, 0, 3);
+//						ev3Screen.drawString("Reading: " + currentReading, 0, 2);
+//						ev3Screen.drawString("Error: " + currentError, 0, 1);
+//						ev3Screen.drawString("Correction: " + trackCorrection, 0, 3);
 						
 						leftMotor.setSpeed((int) (motorPower - trackCorrection));
 						rightMotor.setSpeed((int) (motorPower + trackCorrection));
 						
 						lastError = currentError;
+					} else {
+						ev3Screen.drawString("Stopped Track" , 0, 2);
 					}
 				}
 			}			
@@ -107,6 +113,7 @@ public class Driver {
 	}
 
 	private void manouverObstacle(float distanceFromObstacle) {
+		
 		leftMotor.stop();
 		rightMotor.stop();
 		
@@ -123,7 +130,9 @@ public class Driver {
 		rightMotor.forward();
 		
 		float colourReading = getColourReading();
-
+		
+		ev3Screen.drawString("Manouvering" , 0, 3);
+		
 		while(colourReading > 0.5){
 			currentReading = getDistanceReading();
 			currentError = currentReading - distanceFromObstacle;
@@ -137,6 +146,9 @@ public class Driver {
 
 			colourReading = getColourReading();
 		}
+		
+		ev3Screen.drawString("Manouv. Comp!" , 0, 3);
+		
 		headMotor.rotate(-94);
 		obstacleInFront = false;	
 	}
