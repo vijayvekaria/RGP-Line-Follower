@@ -13,6 +13,7 @@ import lejos.robotics.SampleProvider;
 
 public class Driver {
 	TextLCD ev3Screen = LocalEV3.get().getTextLCD();
+	
 	RegulatedMotor headMotor = new EV3MediumRegulatedMotor(MotorPort.A);
 	RegulatedMotor leftMotor = new EV3LargeRegulatedMotor(MotorPort.B);
 	RegulatedMotor rightMotor = new EV3LargeRegulatedMotor(MotorPort.C);
@@ -20,13 +21,13 @@ public class Driver {
 	Port ultrasonicSensorPort = LocalEV3.get().getPort("S2");
 	Port colourSensorPort = LocalEV3.get().getPort("S3");
 	
-	EV3ColorSensor colourSensor;
-	SampleProvider colourSensorProvider;
-	float[] colourSample;
+	EV3ColorSensor colourSensor = new EV3ColorSensor(colourSensorPort);;
+	SampleProvider colourSensorProvider = colourSensor.getRedMode();;
+	float[] colourSample = new float[colourSensorProvider.sampleSize()];;
 	
-	EV3UltrasonicSensor ultrasonicSensor;
-	SampleProvider ultrasonicSensorProvider;
-	float[] distanceSample; 
+	EV3UltrasonicSensor ultrasonicSensor = new EV3UltrasonicSensor(ultrasonicSensorPort);;
+	SampleProvider ultrasonicSensorProvider = ultrasonicSensor.getDistanceMode();;
+	float[] distanceSample = new float[ultrasonicSensorProvider.sampleSize()];; 
 
 	boolean obstacleInFront = false;
 	
@@ -36,28 +37,14 @@ public class Driver {
 	double diffConstant = 6000;
 	
 	
-	
-	
-	
 	public static void main(String[] args) {
 		Driver testDriver = new Driver();
 	}
 
 	public Driver() {
 		ev3Screen.drawString("START" , 0, 0);
-		createSensor();
 		runObstacleCheck();
 		runTrack();
-	}
-	
-	private void createSensor() {
-		colourSensor = new EV3ColorSensor(colourSensorPort);
-		colourSensorProvider = colourSensor.getRedMode();
-		colourSample = new float[colourSensorProvider.sampleSize()];
-		
-		ultrasonicSensor = new EV3UltrasonicSensor(ultrasonicSensorPort);
-		ultrasonicSensorProvider = ultrasonicSensor.getDistanceMode();
-		distanceSample = new float[colourSensorProvider.sampleSize()];
 	}
 	
 	private float getColourReading(){
@@ -74,50 +61,16 @@ public class Driver {
 		new Thread(new Runnable() {
 			public void run() {
 				while(true){
-					float distanceReading = getDistanceReading();
-					if (distanceReading < 0.15){
-						obstacleInFront = true;
-						manouverObstacle(distanceReading);
+					if (!obstacleInFront) {
+						float distanceReading = getDistanceReading();
+						if (distanceReading < 0.15){
+							obstacleInFront = true;
+							manouverObstacle(distanceReading);
+						}
 					}
 				}
 			}
 		}).start();
-	}
-	
-	private void manouverObstacle(float distanceFromObstacle) {
-		leftMotor.stop();
-		rightMotor.stop();
-		
-		headMotor.rotate(90);
-		rightMotor.rotate(180);				
-		
-		double currentReading = 0;
-		double currentError = 0;
-		double obstacleCorrection = 0;
-		double derivative = 0;
-		double lastError = 0;
-		
-		leftMotor.forward();
-		rightMotor.forward();
-		
-		while(true){
-			float colourReading = getColourReading();
-			if (colourReading > 0.5){
-				currentReading = getDistanceReading();
-				currentError = currentReading - distanceFromObstacle;
-				derivative = currentError - lastError;
-				obstacleCorrection = (propConstant * currentError) + (diffConstant * derivative);
-				
-				leftMotor.setSpeed((int) (motorPower - obstacleCorrection));
-				rightMotor.setSpeed((int) (motorPower + obstacleCorrection));
-				
-				lastError = currentError;
-			} else {
-				obstacleInFront = false;
-				headMotor.rotate(-94);
-				break;
-			}
-		}
 	}
 
 	private void runTrack() {
@@ -151,5 +104,40 @@ public class Driver {
 				}
 			}			
 		}).start();
+	}
+
+	private void manouverObstacle(float distanceFromObstacle) {
+		leftMotor.stop();
+		rightMotor.stop();
+		
+		headMotor.rotate(90);
+		rightMotor.rotate(180);				
+		
+		double currentReading = 0;
+		double currentError = 0;
+		double obstacleCorrection = 0;
+		double derivative = 0;
+		double lastError = 0;
+		
+		leftMotor.forward();
+		rightMotor.forward();
+		
+		float colourReading = getColourReading();
+
+		while(colourReading > 0.5){
+			currentReading = getDistanceReading();
+			currentError = currentReading - distanceFromObstacle;
+			derivative = currentError - lastError;
+			obstacleCorrection = (propConstant * currentError) + (diffConstant * derivative);
+			
+			leftMotor.setSpeed((int) (motorPower - obstacleCorrection));
+			rightMotor.setSpeed((int) (motorPower + obstacleCorrection));
+			
+			lastError = currentError;
+
+			colourReading = getColourReading();
+		}
+		headMotor.rotate(-94);
+		obstacleInFront = false;	
 	}
 }
